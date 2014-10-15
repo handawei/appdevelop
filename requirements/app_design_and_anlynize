@@ -1,0 +1,184 @@
+
+
+先设计产品大体功能。
+
+
+服务垂直层级化。
+
+
+功能水平模块化。
+
+
+
+
+
+1， 两个app 通过 wifi 通信。可以互相发送Hello,world
+
+
+2， 发送文档， 图片， 音频文件， 视频文件。
+
+
+3， 在传输视频过程中另一端可以播放， 而不必等待全部发送完成。
+
+
+4， 可以发送视频流:
+
+      A 建立一个线程通过camera 采集图像至buffer，  建立另一个线程不断从该buffer 里读取数据并发送出去。
+
+      B 建立一个线程不断接收这个流到buffer， 建立另一个线程从buffer 中读取并播放视频流。
+
+       这样通信模块至少需要有如下API ：
+
+       1,  获取对端通信地址 ：  get_partner_addr()
+       2，发送指定大小的内存至指定地址:     send_buffer_to_addr(addr, buffer, len)
+             参数说明： addr ： 通信地址，  buffer : 内存起始地址, len:  发送内存长度，
+             返回值，成功发送的字节长度；  <= 0 ， 失败。
+
+       3， 接收端接受流至buffer:   recv_buffer_from_addr(addr, buffer, len)
+             参数说明： addr ： 指定地址，  buffer ： 内存起始地址， len ： 要接收到长度.
+             返回值： 一次成功接收的字节长度 ； <=0， 失败        
+
+        4， 打开/关闭通信线程（wifi 无线信道不稳定，数据链路层失帧率较高，但流播放需要高实时性， 因此需要建立无应答无连接的通信， 减低可靠性，提高实时性）
+            open_cmu()
+            close_cmu()
+ 
+
+       多媒体模块API：
+
+
+        camera 模块需要提供如下API:
+
+        1， 打开/关闭 camera 模块:  open_camera(devid), close_camera(devid)
+              参数说明： devid:  camera的device ID, 可以存在多个camera。
+              open_camera后， camera en 引脚拉高， camera 模块上电。
+              close_camea后， camera en 引脚拉低， camera 模块下电。
+              不使用camera 模块时， 要使其处于hang up 或down的状态, 保证设备的低功耗
+
+         2， 采集camera的图像到buffer：
+               get_camera_imgs_to_buffer(devid, buffer)
+                参数说明：  
+　　　      devid:   camera 设备号
+             buffer:  指定内存首地址     
+     
+ 
+         audio 模块需要提供如下API：
+
+         1， 打开/关闭 audio 模块:  open_audio(), close_camera()
+              参数说明： devid:  camera的device ID, 一般只有一个audio模块。
+              open_audio后， audio en 引脚拉高， audio 模块上电。
+              close_audio后， audio en 引脚拉低， audio 模块下电。
+              不使用audio 模块时， 要使其处于hang up 或down的状态, 保证设备的低功耗
+           
+              audio 模块打开时， 同时使能audio的输入和输出功能。
+
+          2，采集audio input.,   input_audio_voice_to_buffer(buffer)
+               
+          3， 播放audio 信号    output_audio_voice(buffer)
+                播放buffer 内的音频信号
+         
+
+          多媒体系统类 API ：
+   
+          制作视频流与音频流的同比混合信号 API：
+
+           integrate_video_and_audio_to_buffer(vidio_buffer,  audio_buffer,  integrate_buffer)
+             
+               
+
+
+软件编写思路：
+
+
+1， 用C语言实现，制作demo。
+
+
+2， 用java 实现， 在android 上运行。
+
+
+3， 用C 实现API， java 调用C 库 运行在android 。
+
+
+
+
+
+
+采集，传输， 播放 视频流：
+
+gather , transfer, play  vedio stream.
+
+
+利用wifi 通信：
+
+
+    S 作为热点， C 发起建立连接申请， S 响应C的申请并为C 分配通信地址， 双方建立连接。
+   
+    如何利用wifi模块建立连接，  获取通信双方的IP地址。
+
+
+
+一，
+
+1， 使用C 编写socket通信 程序。提供API与. so。
+
+      该API 为通过send/ receive buffer 函数。
+
+       send_to()
+       recv_from()
+
+
+2， 使用java
+JNI 调用C 库。
+
+
+3， 使用java 制作UI 。 在android 上运行。
+ 
+
+
+二，
+
+    C 通send 发送视频文件，  S 调用recv 接受视频文件。
+
+      send_file(file);
+      recv_file(file);
+
+
+三，
+
+    S 可以播放传输完成后的视频文件。
+
+    play_vedio_file(vedio_file)
+    使用android 的播放插件，利用多媒体类package 的API。
+
+
+* 四，
+
+     C 可以实时采集vedio 信号， 并将该vedio 信号实时发送出去
+
+       gather_vedio_stream(stream)
+       send_vedio_stream(stream)
+
+       首先确认camera的驱动是如何采集并存储视频流的。
+
+
+* 五，
+
+       S can play vedio stream  while C is sending this vedio stream.
+
+        recv_vedio_stream(stream)
+        play_vedio_stream(stream);
+
+        利用android 的播放插件。
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,506 @@
+linux下播放器设计和开发 2010-01-08 09:42:48
+分类： LINUX
+ 
+2008-08-25 13:40
+本文根据DawnLightPlayer的开发经验写成。DawnLithtPlayer是今天3月份开始,和maddrone一起在业余时间开发的一个跨平台，多线程的播放器,主要是在Linux下面开发的,文中所用示例代码均截自其中。
+DawnLightPlayer目前可以运行在Linux和Windows系统上，并使用VC和Python开发了GUI，支持大部分的音视频文件格式和网络流，另外新增对CMMB协议的支持,不支持 RMVB, SWF 等尚未公开协议的视频文件格式。
+
+目录:
+一. 播放器的流程
+   1. 输入
+   2. 解码
+   3. 输出
+二. 播放器的实现
+   1. 输入实现
+   2. 解码线程实现
+   3. 输出线程实现
+三. 视频输出库
+   1. SDL (多平台,支持硬件缩放)
+   2. DirectX DirectDraw (win32平台,支持硬件缩放)
+   3. OpenGL (多平台,支持硬件缩放)
+   4. X11 (Linux/Unix)
+   5. FrameBuffer (Linux, 无硬件缩放)
+四. 音频输出
+   1. OSS (Open Sound System for Linux)
+   2. ALSA (Advanced Linux Sound Architecture)
+   3. DirectSound (WIN32)
+五. 音视频同步
+   1. 以音频为基准同步视频
+   2. 以视频为基准同步音频
+   3. 同步于一个外部时钟
+六. 截图
+   1. 使用jpeglib保存成jpeg文件
+   2. 使用libpng保存成png文件
+七. YUV RGB 软件转换
+八. 软件缩放
+
+
+
+一. 播放器的流程
+
+1. 输入 : 从文件或网络等读取原数据，如 x.avi, x.mov, rtsp://xxx, 对原数据进行解析，比如文件，首先要分析文件格式，从文件中取得音视频编码参数，视频时间长度等信息，然后要从其中取出音频编码数据和视频编码数据送到解 码部分，这里暂称这种编码源数据块为 packet。
+
+2. 解码 : 初始化时，利用输入端从源数据中取得的信息调用不同的解码库初始化；然后接收输入端传送来的音视频编码数据，分别进行音频解码和视频解码，视频解码出来的 数据一般是 YUV 或 RGB 数据，这里暂称为 picture, 音频解码出来的数据是采样数据，是声卡可以播放的数据，这里暂称为 sample。 解码所得的数据接下来送到输出部分。
+
+3. 输出 ： 接收解码部分送来的 picture 和 sample 并显示。 视频显示一般使用某个图形库，如 SDL, Xlib, DirectDraw, OpengGL, FrameBuffer等, 音频输出是把 sample 写入系统的音频驱动，由音频驱动送入声卡播放, 可用的音频输出有 ALSA, OSS, SDL, DirectSound, WaveOut等。
+
+二. 播放器的实现
+
+推荐实现方案
+一个audio_packet队列，一个video_packet队列,一个picture队列，一个sample队列
+一个input线程，两个decode线程，两个output线程,一个UI控制线程
+
+1. 输入实现
+对 文件的解析，首先要了解文件的格式，文件格式一般称为文件容器。公开的文件格式，按格式协议读取分析就可以了，但像RMVB,SWF这种目前还不公开格式 的文件，就不好办，也是目前一般播放器的困难。一般的文件格式的解析libavformat库已经做了，只要使用它就行，下面给出示例代码段:
+
+初始化：
+static int avin_file_init(void)
+{
+    AVFormatParameters params, *ap = &params;
+    err = av_open_input_file( &fmtctx, input_filename, NULL, 0, ap );
+    if ( err < 0 )
+    {
+        av_log(NULL, AV_LOG_ERROR, "%d: init input from file error\n", __LINE__);
+        print_error( input_filename, err );
+        return -1;
+    }
+
+    fmtctx->flags |= AVFMT_FLAG_GENPTS;
+
+    err = av_find_stream_info( fmtctx );
+    if ( err < 0 )
+    {
+        av_log(NULL, AV_LOG_ERROR, "%d: init input from file error\n", __LINE__);
+        print_error( input_filename, err );
+        return -1;
+    }
+
+    if (fmtctx->pb) fmtctx->pb->eof_reached = 0;
+    dump_format( fmtctx, 0, input_filename, 0 );
+
+    ....
+}
+读取packet:
+while( 1 )
+{
+    AVPacket *pkt = NULL;
+    pkt = av_malloc( sizeof(AVPacket) );
+    ret = av_read_frame(fmtctx, pkt);
+    
+送出packet到解码部分:
+    可以memcpy, 或用LinkList结构处理,如:
+    push_to_video_packet_queue(pkt);
+}
+
+如果是自己的私有输入，比如移动电视的视频输入,代码如下,部分是伪代码:
+while( 1 )
+{
+    your_parse_code();
+    size = your_get_video_data(buf);
+
+    pkt = av_mallocz( sizeof(AVPacket) );
+    x = av_new_packet( pkt, vret);
+    memcpy( pkt->data, buf, size );
+    pkt->pts = your_time;
+
+    push_to_video_packet_queue(pkt);
+}
+
+2. 解码线程实现
+解码是个算法大课题，大多只能使用已有的解码库，如libavcodec,下面示例代码:
+while ( 1 )
+{
+    AVPicture *picture;
+    AVPacket *pkt = pop_from_video_packet_queue();
+    AVFrame *frame = avcodec_alloc_frame();
+    avcodec_decode_video(video_ctxp, frame, &got_picture, pkt->data, pkt->size);
+    if ( got_picture )
+    {
+        convert_frame_to_picture( picture, frame );
+        picture->pts = pkt->pts;
+        push_to_picture_queue( picture );
+    }
+}
+音频雷同
+
+3. 输出线程实现
+
+视 频输出要控制FPS，比如25帧每秒的视频，那么每一帧的显示时间要是1/25秒，但把一帧RGB数据写入显存用不了1/25秒的时间，那么就要控制，不 能让25帧的数据在0.1或0.2秒的时间内就显示完了，最简单的实现是在每显示一帧数据后，sleep( 1/fps - 显示用去的时间 )。
+
+音 视频同步这个重要的工作也要在输出线程里完成。以音频为基准同步视频，以视频为基准同步音频，或与一个外部时钟同步，都是可行的方法，但以音频为基准同步 视频是最简单也最有效的方法。音频驱动只要设置好sample rate, sample size 和 channels 后， write 数据就会以此恒定的速度播放， 如果驱动的输出 buffer 满，则 write 就可以等待。
+
+视频:
+while( 1 )
+{
+    picture = pop_from_picture_queue();
+    picture_shot( picture ); /* 截图 */
+    vo->display( picture );
+    video_pts = picture->pts;
+    sync_with_audio(); /* 同步 */
+    control_fps(); /* FPS */
+}
+音频：
+while( 1 )
+{
+    sample = pop_from_sample_queue();
+    ao->play( sample );
+    now_pts = sample->pts;
+}
+
+三. 视频输出库
+
+1. SDL (多平台,支持硬件缩放)
+
+SDL(Simple DirectMedia Layer) is a cross-platform multimedia library designed to provide low level access to audio, keyboard, mouse, joystick, 3D hardware via OpenGL, and 2D video framebuffer.
+
+其实SDL就是一个中间件，它封装了下层的OpenGL, FrameBuffer, X11, DirectX等给上层提供一个统一的API接口，使用SDL的优点是我们不必再为X11或DirectX分别做个视频输出程序了。
+
+SDL可以直接显示YUV数据和RGB数据,一般解码得到的picture都是YUV420P格式的,不用做YUV2RGB的转换就可以直接显示,主要代码如下:
+
+static int vo_sdl_init(void)
+{
+    ....
+    screen = SDL_SetVideoMode(ww, wh, 0, flags);
+    overlay = SDL_CreateYUVOverlay(dw, dh, SDL_YV12_OVERLAY, screen);
+   ....
+}
+
+static void vo_sdl_display(AVPicture *pict)
+{
+    SDL_Rect rect;
+    AVPicture p;
+
+    SDL_LockYUVOverlay(overlay);
+    p.data[0] = overlay->pixels[0];
+    p.data[1] = overlay->pixels[2];
+    p.data[2] = overlay->pixels[1];
+    p.linesize[0] = overlay->pitches[0];
+    p.linesize[1] = overlay->pitches[2];
+    p.linesize[2] = overlay->pitches[1];
+    vo_sdl_sws( &p, pict ); /* only do memcpy */
+    SDL_UnlockYUVOverlay(overlay);
+
+    rect.x = dx;
+    rect.y = dy;
+    rect.w = dw;
+    rect.h = dh;
+    SDL_DisplayYUVOverlay(overlay, &rect);
+}
+
+2. DirectX DirectDraw (win32平台,支持硬件缩放)
+
+DirectX是window上使用较多的一种输出,也支持直接YUV或RGB显示，示例代码:
+
+static int vo_dx_init(void)
+{
+    DxCreateWindow();
+    DxInitDirectDraw();
+    DxCreatePrimarySurface();
+    DxCreateOverlay();
+    DetectImgFormat();
+}
+
+static void vo_dx_display(AVPicture *pic)
+{
+    vfmt2rgb(my_pic, pic);
+    memcpy( g_image, my_pic->data[0], my_pic->linesize[0] * height );
+    flip_page();
+}
+
+3. OpenGL (多平台,支持硬件缩放)
+
+OpenGL是3D游戏库，跨平台，效率高，支持大多数的显示加速，显示2D RGB数据只要使用glDrawPixels函数就足够了,同时禁用一些OpenGL管线操作效率更高,如:
+
+    glDisable( GL_SCISSOR_TEST );
+    glDisable( GL_ALPHA_TEST );
+    glDisable( GL_DEPTH_TEST );
+    glDisable( GL_DITHER );
+
+4. X11 (Linux/Unix)
+
+X11 是Unix/Linux系统平台上的基本图形界面库，像普通的GTK，QT等主要都是建立在X11的基础之上。但X11的API接口太多，复杂，很不利于 开发，基本的GUI程序一般都会使用GTK，QT等，不会直接调用X11的API，这里只是为了效率。MPlyaer的libvo里有X11的完整使用代 码，包括全屏等功能。
+
+static void vo_x11_display(AVPicture* pic)
+{
+    vfmt2rgb( my_pic, pic );
+    Ximg->data = my_pic->data[0];
+    XPutImage(Xdisplay, Xvowin, Xvogc, Ximg,
+              0, 0, 0, 0, dw, dh);
+    XSync(Xdisplay, False);
+    XSync(Xdisplay, False);
+}
+
+5. FrameBuffer (Linux, 无硬件缩放)
+
+FrameBuffer是Linux内核的一部分，提供一个到显存的存取地址的map,但没有任何加速使用。
+
+static void vo_fb_display(AVPicture *pic)
+{
+    int i;
+    uint8_t *src, *dst = fbctxp->mem;
+
+    vfmt2rgb( my_pic, pic );
+    src = my_pic->data[0];
+
+    for ( i = 0; i < fbctxp->dh; i++ )
+    {
+        memcpy( dst, src, fbctxp->dw * (fbctxp->varinfo.bits_per_pixel / 8) );
+        dst += fbctxp->fixinfo.line_length;
+        src += my_pic->linesize[0];
+    }
+}
+
+四. 音频输出
+
+1. OSS (Open Sound System for Linux)
+
+OSS是Linux下面最简单的音频输出了，直接write就可以。
+
+static int ao_oss_init(void)
+{
+    int i;
+    dsp = open(dsp_dev, O_WRONLY);
+    if ( dsp < 0 )
+    {
+        av_log(NULL, AV_LOG_ERROR, "open oss: %s\n", strerror(errno));
+        return -1;
+    }
+    i = sample_rate;
+    ioctl (dsp, SNDCTL_DSP_SPEED, &i);
+    i = format2oss(sample_fmt);
+    ioctl(dsp, SNDCTL_DSP_SETFMT, &i);
+    i = channels;
+    if ( i > 2 ) i = 2;
+    ioctl(dsp, SNDCTL_DSP_CHANNELS, &i);
+
+    return 0;
+}
+
+static void ao_oss_play(AVSample *s)
+{
+    write(dsp, s->data, s->size);
+}
+
+2. ALSA (Advanced Linux Sound Architecture)
+
+ALSA做的比较失败，长长的函数名。
+
+static void ao_alsa_play(AVSample *s)
+{
+    int num_frames = s->size / bytes_per_sample;
+    snd_pcm_sframes_t res = 0;
+    uint8_t *data = s->data;
+
+    if (!alsa_handle)
+        return ;
+
+    if (num_frames == 0)
+        return ;
+
+rewrite:
+    res = snd_pcm_writei(alsa_handle, data, num_frames);
+    if ( res == -EINTR )
+        goto rewrite;
+    if ( res < 0 )
+    {
+        snd_pcm_prepare(alsa_handle);
+        goto rewrite;
+    }
+    if ( res < num_frames )
+    {
+        data += res * bytes_per_sample;
+        num_frames -= res;
+        goto rewrite;
+    }
+}
+
+3. DirectSound (WIN32)
+
+MS DirectX的一部分,它的缺点是不如Linux里面的OSS或ALSA那样，在没有sample写入的时候，自动 silent,DirectSound在播放过程中，当没有sample数据送入输出线程时，它总是回放最后0.2或0.5秒的数据。由于只是最近移植 DawnLightPlayer才使用起Windows，不太了解其机制。
+
+static void dsound_play(AVSample *s)
+{
+    int wlen, ret, len = s->size;
+    uint8_t *data = s->data;
+
+    while ( len > 0 )
+    {
+        wlen = dsound_getspace();
+        if ( wlen > len ) wlen = len;
+        ret = write_buffer(data, wlen);
+        data += ret;
+        len -= ret;
+        usleep(10*1000);
+    }
+}
+
+五. 音视频同步
+
+1. 以音频为基准同步视频
+
+视频输出线程中如下处理:
+    start_time = now();
+    ....
+    vo->display( picture );
+    last_video_pts = picture->pts;
+    end_time = now();
+    rest_time = end_time - start_time;
+    av_diff = last_audio_pts - last_video_pts;
+    if ( av_diff > 0.2 )
+    {
+        if ( av_diff < 0.5 ) rest_time -= rest_time / 4;
+        else rest_time -= rest_time / 2;
+    }
+    else if ( av_diff < -0.2)
+    {
+        if ( av_diff > -0.5 ) rest_time += rest_time / 4;
+        else rest_time += rest_time / 2;
+    }
+    if ( rest_time > 0 )
+        usleep(rest_time);
+
+2. 以视频为基准同步音频
+
+
+3. 同步于一个外部时钟
+
+
+
+六. 截图
+
+截图可以在解码线程做，也可以在输出线程做，见前面的输出线程部分。只要在display前把picture保存起来即可。一般加一些编码，如保存成 PNG 或 JPEG 格式。
+
+1. 使用jpeglib保存成jpeg文件
+
+static void draw_jpeg(AVPicture *pic)
+{
+    char fname[128];
+    struct jpeg_compress_struct cinfo;
+    struct jpeg_error_mgr jerr;
+    JSAMPROW row_pointer[1];
+    int row_stride;
+    uint8_t *buffer;
+
+    if ( !po_status )
+        return ;
+
+    vfmt2rgb24(my_pic, pic);
+    buffer = my_pic->data[0];
+
+#ifdef __MINGW32__
+    sprintf(fname, "%s\\DLPShot-%d.jpg", get_save_path(), framenum++);
+#else
+    sprintf(fname, "%s/DLPShot-%d.jpg", get_save_path(), framenum++);
+#endif
+    fp = fopen (fname, "wb");
+    if (fp == NULL)
+    {
+        av_log(NULL, AV_LOG_ERROR, "fopen %s error\n", fname);
+        return;
+    }
+    cinfo.err = jpeg_std_error(&jerr);
+    jpeg_create_compress(&cinfo);
+    jpeg_stdio_dest(&cinfo, fp);
+
+    cinfo.image_width = width;
+    cinfo.image_height = height;
+    cinfo.input_components = 3;
+    cinfo.in_color_space = JCS_RGB;
+
+    jpeg_set_defaults(&cinfo);
+    cinfo.write_JFIF_header = TRUE;
+    cinfo.JFIF_major_version = 1;
+    cinfo.JFIF_minor_version = 2;
+    cinfo.density_unit = 1;
+    cinfo.X_density = jpeg_dpi * width / width;
+    cinfo.Y_density = jpeg_dpi * height / height;
+    cinfo.write_Adobe_marker = TRUE;
+
+    jpeg_set_quality(&cinfo, jpeg_quality, jpeg_baseline);
+    cinfo.optimize_coding = jpeg_optimize;
+    cinfo.smoothing_factor = jpeg_smooth;
+    if ( jpeg_progressive_mode )
+    {
+        jpeg_simple_progression(&cinfo);
+    }
+    jpeg_start_compress(&cinfo, TRUE);
+
+    row_stride = width * 3;
+    while (cinfo.next_scanline < height)
+    {
+        row_pointer[0] = &buffer[cinfo.next_scanline * row_stride];
+        (void)jpeg_write_scanlines(&cinfo, row_pointer, 1);
+    }
+
+    jpeg_finish_compress(&cinfo);
+    fclose(fp);
+    jpeg_destroy_compress(&cinfo);
+
+    return ;
+}
+
+2. 使用libpng保存成png文件
+
+static void draw_png(AVPicture *pic)
+{
+    int k;
+    png_byte *row_pointers[height]; /* GCC C99 */
+
+    if ( init_png() < 0 )
+    {
+        av_log(NULL, AV_LOG_ERROR, "draw_png: init png error\n");
+        return ;
+    }
+
+    vfmt2rgb24( my_pic, pic );
+
+    for ( k = 0; k < height; k++ )
+        row_pointers[k] = my_pic->data[0] + my_pic->linesize[0] * k;
+
+    png_write_image(png.png_ptr, row_pointers);
+
+    destroy_png();
+}
+
+
+七. YUV RGB 转换
+
+YUV 与RGB的转换和缩放，一般在低端设备上，要有硬件加速来做，否则CPU吃不消。在如今的高端PC上，可以使用软件来做，libswscale库正为此而 来。libswscale针对X86 CPU已经做了优化，如使用 MMX, SSE, 3DNOW 等 CPU 相关的多媒体指令。
+
+static int vfmt2rgb(AVPicture *dst, AVPicture *src)
+{
+    static struct SwsContext *img_convert_ctx;
+
+    img_convert_ctx = sws_getCachedContext(img_convert_ctx,
+                      width, height, src_pic_fmt,
+                      width, height, my_pic_fmt, SWS_X, NULL, NULL, NULL);
+
+    sws_scale(img_convert_ctx, src->data, src->linesize,
+              0, width, dst->data, dst->linesize);
+
+    return 0;
+}
+
+比如从 YUV420P 到 RGB24 的转换，只要设置
+
+src_pic_fmt = PIX_FMT_YUV420P ;
+my_pic_fmt = PIX_FMT_RGB24 ;
+
+
+八. 软件缩放
+
+软件缩放就可以使用上述的 libswscale 库，调用代码基本一样，只是改一下目标picture的width和height,如放大两倍:
+
+static int zoom_2(AVPicture *dst, AVPicture *src)
+{
+    static struct SwsContext *img_convert_ctx;
+
+    img_convert_ctx = sws_getCachedContext(img_convert_ctx,
+                      width, height, src_pic_fmt,
+                      width*2, height*2, my_pic_fmt, SWS_X, NULL, NULL, NULL);
+
+    sws_scale(img_convert_ctx, src->data, src->linesize,
+              0, width*2, dst->data, dst->linesize);
+
+    return 0;
+}
