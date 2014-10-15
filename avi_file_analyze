@@ -1,0 +1,98 @@
+二进制 AVI格式解析
+分类： 音视频文件 2013-12-16 15:23 66人阅读 评论(0) 收藏 举报
+转自http://blog.csdn.net/njuitjf/article/details/5680632
+ 
+52 49 46 46 -> FORCC码'RIFF'的ASCII值，说明是一个RIFF文件。RIFF( resource interchange file format ) 。
+84 CF 4A 00 -> 表示文件大小的4个字节，由于windows是小头的，所以文件大小为0x004ACF84，即4902788字节，由于该size不包含开头的8字节，所以文件总大小为4902796字节
+41 56 49 20 -> FOURCC码'AVI '的ASCII码，文件类型，说明是一个avi文件。AVI（AudioVideoInterleaved）。
+        4C 49 53 54 -> FOURCC码'LIST'的ASCII码，说明是一个list
+        7C 02 00 00 -> 表示list大小的4个字节。该list size为0x0000027C，即636字节，整个list的大小为：636 + 8 = 644 字节
+        68 64 72 6C -> FOURCC码'hdrl'的ASCII码，list类型，说明这是一个头信息列表（header list）。
+                61 76 69 68 -> FOURCC码'avih'的ASCII码，表示该chunk的ID(ckID)，说明这是一个主avi头（main avi header）。是结构体AVIMAINHEADER中的fcc成员
+                38 00 00 00 -> 表示chunk大小的4个字节。该chunk的size为0x00000038，即56字节，整个chunk的大小为：56 + 8 = 64 字节。是结构体AVIMAINHEADER中的cb成员
+                56 82 00 00 -> 是结构体AVIMAINHEADER中的dwMicroSecPerFrame成员，表示帧之间的微秒数。为0x00008256，即33366微秒。
+                EF AF 0A 00 -> 是结构体AVIMAINHEADER中的dwMaxBytesPerSec成员，表示文件的近似最大速率。为0x000AAFEF，即700399字节/秒。
+                01 00 00 00 -> 是结构体AVIMAINHEADER中的dwPaddingGranularity成员，表示以多少字节对齐。为0x000001，即1字节，说明文件以1字节对齐。
+                10 08 00 00 -> 是结构体AVIMAINHEADER中的dwFlags成员。为0x00000810，HasIndex(+)；MustUseIndex；IsInterleaved；WasCaptureFile；Copyrighted；TrustCKType(+)
+                DD 00 00 00 -> 是结构体AVIMAINHEADER中的dwTotalFrames成员。表示文件中总共有多少帧。为：0x000000DD，即221帧。dwTotalFrames * dwMicroSecPerFrame = 文件总时长。221 * 33366 = 7373886 微秒。即文件总时长为7.373886秒。
+                00 00 00 00 -> 是结构体AVIMAINHEADER中的dwInitialFrames成员。表示交错帧中的初始帧，非交错文件，该值为0。从dwFlags可知，该文件为非交错文件，所以该值为0。 是否与rec有关
+                01 00 00 00 -> 是结构体AVIMAINHEADER中的dwStreams成员，表示文件中所包含的流的数量。该文件中只包含一中流，所以该值为1。
+                A8 62 00 00 -> 是结构体AVIMAINHEADER中的dwSuggestedBufferSize成员，表示读该文件时，建议的缓存大小。为0x000062A8，即25256字节。查看数据chunk可知，最大的数据chunk的size就是25256。
+                60 01 00 00 -> 是结构体AVIMAINHEADER中的dwWidth成员，表示AVI文件的宽，以像素为单位。为0x00000160，即352像素。
+                F0 00 00 00 -> 是结构体AVIMAINHEADER中的dwHeight成员，表示AVI文件的高，以像素为单位。为0x000000F0，即240像素。
+                00 00 00 00 -> 是结构体AVIMAINHEADER中的dwReserved[0]成员，保留。
+                00 00 00 00 -> 是结构体AVIMAINHEADER中的dwReserved[1]成员，保留。
+                00 00 00 00 -> 是结构体AVIMAINHEADER中的dwReserved[2]成员，保留。
+                00 00 00 00 -> 是结构体AVIMAINHEADER中的dwReserved[3]成员，保留。
+                4C 49 53 54 -> FOURCC码'LIST'的ASCII码，说明是一个list
+                24 01 00 00 -> 表示list大小的4个字节。该list size为0x00000124，即292字节，整个list的大小为：292 + 8 = 300 字节
+                73 74 72 6C -> FOURCC码'strl'的ASCII码，list类型，说明这是一个流信息的list。
+                        73 74 72 68 -> FOURCC码'strh'的ASCII码，说明这是一个流的头信息chunk，其内容是一个AVISTREAMHEADER结构体。该值是AVISTREAMHEADER结构体的fcc成员。
+                        38 00 00 00 -> 表示chunk大小的4个字节。该chunk的size为0x00000038，即56字节，整个chunk的大小为：56 + 8 = 64 字节。是结构体AVISTREAMHEADER的cb成员。
+                        76 69 64 73 -> FOURCC码'vids'的ASCII码，说明这是一个视频流。是结构体AVISTREAMHEADER的fccType成员。
+                        63 76 69 64 -> FOURCC码'cvid'的ASCII码，标识解码该流时使用的编解码器。是结构体AVISTREAMHEADER的fccHandler成员。
+                        00 00 00 00 -> 是结构体AVISTREAMHEADER的dwFlags成员。整个数据流的标志。Disabled；VideoPaletteChanges。
+                        00 00 00 00 -> 是结构体AVISTREAMHEADER的wPriority成员和wLanguage成员。
+                        00 00 00 00 -> 是结构体AVISTREAMHEADER的dwInitialFrames成员。表示交错帧中的初始帧，非交错文件，该值为0。
+                        E9 03 00 00 -> 是结构体AVISTREAMHEADER的dwScale成员。为0x000003E9，即1001。与 dwRate 一起，决定该流所要使用的时间尺度。对于视频流来说，dwRate / dwScale = 帧率（fram rate ）。
+                        30 75 00 00 -> 是结构体AVISTREAMHEADER的dwRate成员。为0x00007530，即3000。该视频流的帧率为：3000 / 1001 = 29.97 (fps)
+                        00 00 00 00 -> 是结构体AVISTREAMHEADER的dwStart成员。这个流的开始时间。此处为0。即文件开始时，流即开始。
+                        DD 00 00 00 -> 是结构体AVISTREAMHEADER的dwLength成员。表示流的长度。为0x000000DD，即221。对于视频流，这其实就是总帧数，用dwLength除以帧率，即得到流的总时长。
+                        A8 62 00 00 -> 是结构体AVISTREAMHEADER的dwSuggestedBufferSize成员。表示读该流时，建议的缓存大小。为0x000062A8，即25256字节。查看数据chunk可知，该流最大的数据chunk的size就是25256。
+                        00 00 00 00 -> 是结构体AVISTREAMHEADER的dwQuality成员。表示该流的质量指标，此处为0。
+                        00 00 00 00 -> 是结构体AVISTREAMHEADER的dwSampleSize成员。表示一个数据样本的大小。如果样本大小可变，此值为0。视频流中，该值一般为0。此处为0。
+                        00 00 00 00 -> 是结构体AVISTREAMHEADER的rcFrame成员的left和top成员。rcFrame指定一个由主头文件中的wWidth 成员和dwHeight 成员文本流或视频流的目标矩形。此处，left和top都为0。
+                        00 00 00 00 -> 是结构体AVISTREAMHEADER的rcFrame成员的right和bottom成员。此处为0。
+                        73 74 72 66 -> FOURCC码'strf'的ASCII码，说明这是一个流的格式信息chunk。如果是视频流，其数据是一个BITMAPINFO结构体，对于音频流，其数据是一个WAVEFORMATEX结构体。
+                        28 00 00 00 -> 格式信息chunk的大小，不包括最初的8个字节。为0x00000028，即40字节。整个chunk的大小为：40 + 8 = 48 字节。
+                        28 00 00 00 -> 是结构体BITMAPINFO的成员BITMAPINFOHEADER的biSize成员，表示结构体BITMAPINFOHEADER的大小。为0x00000028，即40字节。这说明本chunk中，BITMAPINFO只包含一个成员，即BITMAPINFOHEADER结构体(因为biBitCount为24，所以结构体BITMAPINFO不包含颜色表)。
+                        60 01 00 00 -> 是结构体BITMAPINFOHEADER的biWidth成员，位图的宽，以像素为单位。为0x00000160，即352像素。
+                        F0 00 00 00 -> 是结构体BITMAPINFOHEADER的biHeight成员，位图的高，以像素为单位。为0x000000F0，即240像素。
+                        01 00 18 00 -> 是结构体BITMAPINFOHEADER的biPlanes成员和biBitCount成员。其中biPlanes表示目标设备平面层的个数，其值为1。biBitCount表示一个像素所占的位数，其值为0x0018，即一个像素占24位。
+                        63 76 69 64 -> 'cvid'的ASCII码，是结构体BITMAPINFOHEADER的biCompression成员，表示了压缩的类型。
+                        FC 7B 00 00 -> 是结构体BITMAPINFOHEADER的biSizeImage成员，表明image的大小。为0x00007BFC，即31740字节。
+                        00 00 00 00 -> 是结构体BITMAPINFOHEADER的biXPelsPerMeter成员，水平分辨率，此处为0。
+                        00 00 00 00 -> 是结构体BITMAPINFOHEADER的biYPelsPerMeter成员，垂直分辨率，此处为0。
+                        00 00 00 00 -> 是结构体BITMAPINFOHEADER的biClrUsed成员，此处为0。表明此处使用与对于biCompression指定的压缩模式的biBitCount值所对应的最大值。
+                        00 00 00 00 -> 是结构体BITMAPINFOHEADER的biClrImportant成员，此处为0。表明所有的颜色都是重要的。
+                        ------------------------------------------------------------------------------------------------
+                        是一个AVI 2.0的索引结构体。由于此次只使用old index，暂不对此进行研究。
+                        ------------------------------------------------------------------------------------------------
+                --------------------------------------------------------------------------------------------------------
+                一个AVI OpenDML 1.02 Header List，包含一个AVI ODML Header。暂不研究。
+                --------------------------------------------------------------------------------------------------------
+        4C 49 53 54 -> FOURCC码'LIST'的ASCII码，说明是一个list
+        0C BF 4A 00 -> 表示list大小的4个字节。该list size为0x004ABF0C，即4898572字节，整个list的大小为：4898572 + 8 = 4898580 字节
+        6D 6F 76 69 -> FOURCC码'movi'的ASCII码，list类型，说明这是一个数据list。
+                --------------------------------------------------------------------------------------------------------
+                一个AVI Standard Index Chunk，暂不研究
+                --------------------------------------------------------------------------------------------------------
+                30 30 64 62 -> FOURCC码'00db'的ASCII码，说明这是第一个流（视频流）的数据，为未压缩帧。
+                08 62 00 00 -> 表示chunk大小的4个字节。该chunk的size为0x00006208，即25096字节，整个chunk的大小为：25096 + 8 = 25104 字节。
+                --------------------------------------------------------------------------------------------------------
+                chunk 的数据。
+                --------------------------------------------------------------------------------------------------------
+                30 30 64 63 -> FOURCC码'00dc'的ASCII码，说明这是第一个流（视频流）的数据，为压缩帧。
+                DA 5A 00 00 -> 表示chunk大小的4个字节。该chunk的size为0x00005ADA，即23258字节，整个chunk的大小为：23258 + 8 = 23266 字节。
+                --------------------------------------------------------------------------------------------------------
+                chunk 的数据。
+                --------------------------------------------------------------------------------------------------------
+                --------------------------------------------------------------------------------------------------------
+                连续的chunk 的数据。
+                --------------------------------------------------------------------------------------------------------
+        64 69 78 31 -> FOURCC码'idx1'的ASCII码，chunk 类型，说明这是一个old index chunk。
+        E0 0D 00 00 -> 表示chunk大小的4个字节。该chunk的size为0x00000DE0，即3552字节，整个chunk的大小为：3552 + 8 = 3560 字节。每条索引信息有4个DWORD类型构成，即占16个字节，所以该index chunk中包含的索引项的个数为：3552 / 16 = 222。由此可以推知，movi list中含有222个数据chunk。
+                37 46 78 78 -> '7Fxx'的ASCII码，chunk ID，这应该是用户自定义的chunk的索引。
+                00 00 00 00 -> 标志。'LIST'-chunk；KeyFrame；Midpart；Firstpart；Lastpart；NoTime
+                9C 02 00 00 -> 偏移量。为0x0000029C，即668字节。
+                00 00 00 00 -> 该数据chunk的大小。根据给chunk的偏移量，没有找到该chunk。该chunk的数据大小又为0，推断这是一处错误数据。
+                30 30 64 62 -> '00db'的ASCII码，chunk ID，说明是第一个流的非压缩帧。
+                10 00 00 00 -> 标志。'LIST'-chunk；KeyFrame(+)；Midpart；Firstpart；Lastpart；NoTime
+                FC 08 00 00 -> 偏移量。为0x000008FC，即2300字节。该文件中用的是从文件开始处的偏移量。
+                08 62 00 00 -> 该数据chunk的大小。为0x00006208，即25096字节。
+                30 30 64 63 -> '00dc'的ASCII码，chunk ID，说明是第一个流的压缩帧。
+                00 00 00 00 -> 标志。'LIST'-chunk；KeyFrame；Midpart；Firstpart；Lastpart；NoTime
+                0C 6B 00 00 -> 偏移量。为0x00006B0C，即27404字节。该文件中用的是从文件开始处的偏移量。
+                DA 5A 00 00 -> 该数据chunk的大小。为0x00005ADA，即23258字节。
+                --------------------------------------------------------------------------------------------------------
+                下面依次是index成员，直到文件结束。

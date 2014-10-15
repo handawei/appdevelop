@@ -1,0 +1,66 @@
+ 如何同步视频到音频
+分类： ffmpeg 0.5 学习笔记 2013-12-25 17:08 71人阅读 评论(0) 收藏 举报
+同步视频到音频涉及3个方面：
+
+1.计算音频时钟
+2.计算视频时钟
+3.据音频时钟纠正视频时钟
+
+
+
+// 计算音频的已解码数据需要播放的时间
+int audio_decode_frame(VideoState *is, uint8_t *audio_buf, int buf_size, double *pts_ptr) 
+{
+    ......
+        /* if update, update the audio clock w/pts */
+        is->audio_clock += (double)data_size /bytes_per_sec;
+    ......
+}
+// 当前音频时钟 = 音频的已解码数据需要播放的时间 - 音频缓存中剩余数据需要播放的时间
+double get_audio_clock(VideoState *is) {
+    ......
+        int hw_buf_size = is->audio_buf_size - is->audio_buf_index;
+    pts -= (double)hw_buf_size / bytes_per_sec;
+    ......
+}
+
+void video_refresh_timer(void *userdata) 
+{
+
+    // 计算前后2帧的延时
+    delay = vp->pts - is->frame_last_pts; /* the pts from last time */
+
+    /* update delay to sync to audio */
+    ref_clock = get_audio_clock(is);
+
+    // 计算音频时钟和视频时钟的差值 
+    diff = vp->pts - ref_clock;
+
+    /* Skip or repeat the frame. Take delay into account
+    FFPlay still doesn't "know if this is the best guess." */
+    sync_threshold = (delay > AV_SYNC_THRESHOLD) ? delay : AV_SYNC_THRESHOLD;
+    if(fabs(diff) < AV_NOSYNC_THRESHOLD) 
+    {
+        // 据音频时钟纠正视频帧的延时, 太晚了则Skip, 太早了则加大延时
+        if(diff <= -sync_threshold) 
+        {
+            delay = 0;
+        } 
+        else if(diff >= sync_threshold) 
+        {
+            delay = 2 * delay;
+        }
+    }
+
+    // 据系统时钟纠正视频帧的延时
+    is->frame_timer += delay;
+    /* computer the REAL delay */
+    actual_delay = is->frame_timer - (av_gettime() / 1000000.0);
+    if(actual_delay < 0.010) 
+    {
+        /* Really it should skip the picture instead */
+        actual_delay = 0.010;
+    }
+
+}
+

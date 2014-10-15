@@ -1,0 +1,585 @@
+   OpenGL是一个工业标准的三维计算机图形软件接口，它由SGI公司发布并广泛应用于Unix、OS/2、Windows/NT等多种平台，当然也包括Linux。在Windows/NT平台上，一般的开发工具如VC、BC、Fortran Powerstation等都支持直接的OpenGL应用的开发；在商用Unix平台上，Motif同样很好的支持OpenGL（毕竟OpenGL最初是工作站上的东西）；那么在Linux上呢？ 
+　　 本文不着力于OpenGL编程的方法和技巧，而是把重点放在如何在Linux平台上开发OpenGL程序。介绍支持OpenGL的几个工具包，并辅以详细的实例来阐述。 
+
+1. Linux下OpenGL编程环境简介 
+
+　　 OpenGL不是自由软件，它的版权、商标（OpenGL这个名字）都归SGI公司所有。但在Linux下有OpenGL的取代产品：Mesa。Mesa提供和OpenGL几乎完全一致的接口，对利用OpenGL API编程的人来说，几乎感觉不到任何差异。Mesa是遵循GPL协议（部分遵循LGPL协议）的自由软件，而且，正是由于Mesa的自由性，它在对新硬件的支持度等方面都超过了OpenGL。Mesa可以从www.mesa3d.org取得。得到Mesa后，依照说明即可生成编写程序所需要的动态、静态连接库和头文件。 
+　　 了解OpenGL的读者都知道，OpenGL本身只提供三维图形接口，不具备绘制窗口、接受响应、处理消息等功能。这些功能必须由第三方的开发环境提供，如上面提及的VC等等。有人会想，既然在Motif下可以开发OpenGL程序，那么，使用Linux下的Lesstif也应该可以。是的，的确可以，但不幸的是，Linux下的Lesstif是一个很不成熟的产品，而且也不具有可移植性，所以应用Lesstif开发的人很少。下面我们简单介绍几个常用的工具包。 
+　　 在Linux下开发OpenGL程序，最常用的工具是GLUT（The OpenGL Utility Toolkit）。它可以创建一个或多个OpenGL窗口，响应、处理用户的交互操作、简单的弹出式菜单以及一些内置的绘图和字体处理功能。GLUT和OpenGL一样，可以移植于多种平台。由于它良好的表现，现在它已经成为Mesa发布的标准套件之一。 
+　　 另一个很好的开发工具包是FLTK（Fast Light Tool Kit），这是一个用C++编写的图形界面开发工具。和GTK++、KDE不同，它只关注于图形界面的设计，而尽量不牵涉其他的实际应用。这个特点使得它比其他许多开发工具简练和高效。而且，它同样也是一个具有良好移植性的开发工具。事实上，它现在正引来越来越多人的兴趣，许多商业软件（尤其是致力于开发嵌入式桌面系统的软件）都选用了它作为图形界面的开发工具。关于它的详细情况参见作者的另一篇文章《FLTK---一个优秀的图形界面开发工具包》。在FLTK里有一个组件：Fl_Gl_Window是专门的OpenGL窗口，利用它开发OpenGL程序相当方便。 
+　　 最后要提的是GTK和KDE，它们是目前在Linux下用的最多的开发工具。GTK本身并不直接支持OpenGL（新的版本是否支持，尚不太清楚），但有人开发了支持OpenGL的Widget，叫做GLAREA，需要的读者可以到网上去查找或者与本文作者联系。KDE提供了对OpenGL的支持，但它的缺陷之一是KDE只运行于Linux系统，不具有可移植性。在这里，我将主要向大家介绍前面两个工具包。 
+
+2. 用GLUT开发OpenGL程序 
+
+2.1 如何获得 
+　　 GLUT可以从Mesa中获得，读者也可以直接到它的主页去下载它：　　　　　　　　　　　　　　　　　　　　　　http://reality.sgi.com/employees/mjk_asd/glut3/glut3.html。按照说明安装后在OpenGL的头文件GL目录下将会有GLUT的头文件glut.h，同时安装的还有库文件libglut.a或libglut.so。有了它们以后，就可以用GLUT来编程了。 
+
+2.2 一个简单的例子 
+下面，我们先看一个简单的例子。这个例子画一个立体的球。 
+/* light.c 
+此程序利用GLUT绘制一个OpenGL窗口，并显示一个加以光照的球。 
+*/ 
+/* 由于头文件glut.h中已经包含了头文件gl.h和glu.h，所以只需要include 此文件*/ 
+# include < GL / glut.h > 
+# include < stdlib.h > 
+
+/* 初始化材料属性、光源属性、光照模型，打开深度缓冲区 */ 
+void init ( void ) 
+{ 
+GLfloat mat_specular [ ] = { 1.0, 1.0, 1.0, 1.0 }; 
+GLfloat mat_shininess [ ] = { 50.0 }; 
+GLfloat light_position [ ] = { 1.0, 1.0, 1.0, 0.0 }; 
+
+glClearColor ( 0.0, 0.0, 0.0, 0.0 ); 
+glShadeModel ( GL_SMOOTH ); 
+
+glMaterialfv ( GL_FRONT, GL_SPECULAR, mat_specular); 
+glMaterialfv ( GL_FRONT, GL_SHININESS, mat_shininess); 
+glLightfv ( GL_LIGHT0, GL_POSITION, light_position); 
+
+glEnable (GL_LIGHTING); 
+glEnable (GL_LIGHT0); 
+glEnable (GL_DEPTH_TEST); 
+} 
+/*调用GLUT函数，绘制一个球*/ 
+void display ( void ) 
+{ 
+glClear (GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); 
+glutSolidSphere (1.0, 40, 50); 
+glFlush (); 
+} 
+/* 定义GLUT的reshape函数，w、h分别是当前窗口的宽和高*/ 
+void reshape (int w, int h) 
+{ 
+glViewport (0, 0, (GLsizei) w, (GLsizei) h); 
+glMatrixMode (GL_PROJECTION); 
+glLoadIdentity ( ); 
+if (w <= h) 
+glOrtho (-1.5, 1.5, -1.5 * ( GLfloat ) h / ( GLfloat ) w, 
+1.5 * ( GLfloat ) h / ( GLfloat ) w, -10.0, 10.0 ); 
+else 
+glOrtho (-1.5 * ( GLfloat ) w / ( GLfloat ) h, 
+1.5 * ( GLfloat ) w / ( GLfloat ) h, -1.5, 1.5, -10.0, 10.0); 
+glMatrixMode ( GL_MODELVIEW ); 
+glLoadIdentity ( ) ; 
+} 
+
+/* 定义对键盘的响应函数 */ 
+void keyboard ( unsigned char key, int x, int y) 
+{ 
+/*按Esc键退出*/ 
+switch (key) { 
+case 27: 
+exit ( 0 ); 
+break; 
+} 
+} 
+
+int main(int argc, char** argv) 
+{ 
+/* GLUT环境初始化*/ 
+glutInit (&argc, argv); 
+/* 显示模式初始化 */ 
+glutInitDisplayMode (GLUT_SINGLE | GLUT_RGB | GLUT_DEPTH); 
+/* 定义窗口大小 */ 
+glutInitWindowSize (300, 300); 
+/* 定义窗口位置 */ 
+glutInitWindowPosition (100, 100); 
+/* 显示窗口，窗口标题为执行函数名 */ 
+glutCreateWindow ( argv [ 0 ] ); 
+/* 调用OpenGL初始化函数 */ 
+init ( ); 
+/* 注册OpenGL绘图函数 */ 
+glutDisplayFunc ( display ); 
+/* 注册窗口大小改变时的响应函数 */ 
+glutReshapeFunc ( reshape ); 
+/* 注册键盘响应函数 */ 
+glutKeyboardFunc ( keyboard ); 
+/* 进入GLUT消息循环，开始执行程序 */ 
+glutMainLoop( ); 
+return 0; 
+} 
+　　 从上面的例子中我们可以看出，GLUT采用一种函数注册的机制来实现OpenGL绘图。它的一般流程正如我们上面的注释所写，先是初始化函数，定义窗口，然后执行OpenGL初始化程序，这主要是一些需要全局设置的环境变量。接下来是注册相应事件的函数，包括完成实际绘图工作的绘制程序、改变OpenGL窗口大小时的响应函数、键盘事件的响应函数和鼠标时间的响应函数。最后调用glutMainLoop（）函数，执行在glutReshapeFunc和glutDisplayFunc中注册的函数，进入消息循环。当用户通过键盘和鼠标进行交互操作时，它即调用相应的函数。 
+　　 我们编译上面的名为light.c的源文件。假定头文件（目录GL）放在目录/usr/local/include下，库文件（动态库libGL.so.*、libGLU.so.*和libglut.so.*）在目录/usr/local/lib目录下，并已经运行了ldconfig，则编译命令为： 
+　　 gcc -I/usr/local/include -L/usr/local/lib -L/usr/X11R6/lib -lglut -lGLU -lGL 
+　　 -lX11 -lXext -lXmu -lXi -lm light.c -o light 
+　　 其中的-lX11 -lXert -lXi -lm 是绘制窗口需要的X的库，它们默认在 /usr/X11R6/lib目录下。下面的图一即是运行light的结果，当按下ESC键时，程序会退出。调整窗口大小时，图形自动重绘。注意在上面reshape函数中，比较w和h的值给出的取景变换，这是一个常用的技巧。 
+
+
+　　　　　　　　　 图一 
+
+2.3 GLUT简介 
+　　 GLUT常用的函数主要包括以下几类： 
+　　 · 初始化函数。主要就是上面例子中的几个函数。 
+　　 · 消息循环函数。即glutMainLoop函数。 
+　　 · 窗口管理函数。包括窗口的创建、修改、删除等。GLUT支持多个OpenGL窗口。 
+　　 · Overlay管理函数。当用户显卡支持Overlay方式时，可以用这些函数来创建、管理、删除GLUT窗口的Overlay。 
+　　 · 菜单管理函数。定制菜单以及定义菜单相应事件。 
+　　 · 事件注册函数。除了上面例子中提及的外，还有鼠标、空间球（提供三维操作的装备）、特殊键（Ctrl、Shift、F系列键、方向键）等设备的事件注册函数。 
+　　 · 字体绘制函数。用多种字体、字号供选择。 
+　　 · 简单几何体的绘制程序。包括球、立方体、锥体、圆环体、十二面体、八面体、四面体、二十面体和茶壶。每种几何体都有实体和虚线两个选项。 
+　　 · 取状态函数。类似OpenGL的glGet系列函数，取得GLUT的各种状态值。 
+　　 · 颜色索引表函数。 
+这些函数极大的方便了用户的OpenGL编程。下面我们简略介绍一下几个常用的函数。 
+　　 · glutPostRedisplay（）。发送消息给函数glutMainLoop，请求重绘本窗口。利用此函数可以实现动画。例如在上面的例子中，我们添加一个全局变量：float move=0.0。并定义函数MoveSphere如下： 
+void MoveSphere ( void ) 
+{ 
+for(int i=0;i<100;i++){ 
+if ( move<1.0) move+=0.1; 
+else move=0.0; 
+glutPostRedisplay ( ); 
+} 
+} 
+同时修改函数display（）为： 
+void display ( void ) 
+{ 
+glClear (GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); 
+glTranslatef ( move, 0.0, 0.0); 
+glutSolidSphere (1.0, 40, 50); 
+glFlush (); 
+} 
+　　 这样，当我们执行函数MoveSphere时，就会看到上面的球从中间向右移动一段距离，然后又回到中心，继续移动。 
+　　 · glutIdleFunc（）函数。这个函数注册一个空闲程序一直在后台运行。我们将上面的MoveSphere函数加以修改，去掉循环，然后在light.c程序的glutMainLoop（）函数调用前添加一行代码：glutIdleFunc (MoveSphere)；这样我们不需要直接调用函数MoveSphere，程序一运行，它就被反复调用直到我们退出程序为止，这和我们前一版本中它只能循环特定的步数不一样。 
+　　 · glutTimerFunc（）函数。和前面的glutIdleFunc（）函数类似，但不同的是它注册的函数每隔特定的事件发生。时间的单位是毫秒。 
+　　 · glutBitmapCharacter（）函数。用位图方式按指定的字体绘制一个字符串。 
+　　 · glutSolidSphere（）函数。这是绘制几何体类函数中的一个。此函数绘制一个球体。 
+
+2.4 一个更有代表性的例子 
+　　 下面我们来看一个稍稍复杂的例子。我们绘制一个平面，用户的左键点击被自动连接成一个多边形。当用户点击右键，会弹出菜单供用户选择。用户可以选择清除、镶嵌和退出。选择清除将回到初始状态；选择镶嵌程序自动对多边形进行三角剖分；选择退出则终止程序。（见图二、图三和图四） 
+
+
+　　　　　　　图二 　　　　　　　　　　　　　　 图三 　　　　　　　　　　　　　　图四 
+/* tessdemo.c 多边形镶嵌的例子，使用函数gluTessCallback和函数gluTessVertex。*/ 
+#include 
+#include 
+#include 
+#include 
+
+/* 定义允许的最大多边形数、多边形允许的最大顶点数和可镶嵌的最大三角形数*/ 
+#define MAX_POINTS 256 
+#define MAX_CONTOURS 32 
+#define MAX_TRIANGLES 256 
+
+/* 用于菜单选项的枚举类型 */ 
+typedef enum{ QUIT, TESSELATE, CLEAR } menu_entries; 
+static mode_type mode; 
+
+/* 定义绘制模式的枚举类型 */ 
+typedef enum{ DEFINE, TESSELATED } mode_type; 
+static int menu; 
+static GLsizei width, height; /* OpenGL窗口的大小 */ 
+static GLuint contour_cnt; /* 记录多边形数目 */ 
+static GLuint triangle_cnt; /* 记录三角形数目 */ 
+static GLuint list_start; /* 用于显示列表 */ 
+
+/* 多边形结构 */ 
+static struct { 
+GLfloat p[MAX_POINTS][2]; 
+GLuint point_cnt; 
+} contours [ MAX_CONTOURS ] ; 
+
+/* 三角形结构 */ 
+static struct { 
+GLsizei no; 
+GLfloat p [3] [2]; 
+GLclampf color [3] [3]; 
+} triangles [ MAX_TRIANGLES ]; 
+
+/* 窗口大小改变时，设定width和height值，用于重新绘制网格 */ 
+void set_screen_wh ( GLsizei w, GLsizei h ) 
+{ width = w; height = h; } 
+
+void tesse ( void ) 
+{ /* 镶嵌函数，调用gluTess* 函数实现*/ } 
+
+/* 对点击鼠标左键事件的响应函数：更新当前多边形顶点数组，并重新绘制 */ 
+void left_down ( int x1, int y1 ) 
+{ 
+GLfloat P[2]; 
+GLuint point_cnt; 
+
+/* 将GLUT窗口坐标变换为GL坐标：前者（0，0）在左上角而后者在左下角*/ 
+P[0] = x1; P[1] = height - y1; 
+
+/* 更新顶点数据 */ 
+point_cnt = contours [ contour_cnt ] . point_cnt; 
+contours [ contour_cnt ] . p [ point_cnt ][ 0 ] = P [ 0 ]; 
+contours [ contour_cnt ]. p [ point_cnt ] [ 1 ] = P [ 1 ]; 
+
+/* 绘制新添加的边，若为第一个点，则绘制一个点 */ 
+glBegin ( GL_LINES ); 
+if ( point_cnt ) { 
+glVertex2fv ( contours[contour_cnt].p[point_cnt-1] ); 
+glVertex2fv ( P ); 
+} 
+else { 
+glVertex2fv ( P ); 
+glVertex2fv ( P ); 
+} 
+glEnd(); 
+glFinish(); 
+contours[contour_cnt].point_cnt++; 
+} 
+
+/* 点击鼠标中键的响应事件，有些系统可以用同时点击左右键模拟：结束一个多边形 */ 
+void middle_down( int x1, int y1 ) 
+{ 
+GLuint point_cnt; 
+(void) x1; 
+(void) y1; 
+point_cnt = contours[contour_cnt].point_cnt; 
+/* 连接起始点和最后一个点，构成一个完整的多边形 */ 
+if ( point_cnt > 2 ) 
+{ 
+glBegin( GL_LINES ); 
+glVertex2fv( contours[contour_cnt].p[0] ); 
+glVertex2fv( contours[contour_cnt].p[point_cnt-1] ); 
+contours[contour_cnt].p[point_cnt][0] = -1; 
+glEnd(); 
+glFinish(); 
+contour_cnt++; 
+contours[contour_cnt].point_cnt = 0; 
+} 
+} 
+
+/* 处理鼠标响应的函数，根据按键的类型调用不同的函数：左键和中键。 */ 
+void mouse_clicked( int button, int state, int x, int y ) 
+{ 
+/* 将OpenGL的像素坐标换为背景的网格坐标，背景网格为边长为10的小正方形 */ 
+x -= x%10; 
+y -= y%10; 
+switch ( button ) { 
+case GLUT_LEFT_BUTTON: /* GLUT发现左键被点击 */ 
+if ( state == GLUT_DOWN ) { 
+left_down( x, y ); 
+} 
+break; 
+case GLUT_MIDDLE_BUTTON: /* 中键被点击 */ 
+if ( state == GLUT_DOWN ) { 
+middle_down( x, y ); 
+} 
+break; 
+} 
+} 
+/* OpenGL绘制函数，有两种模式 */ 
+void display( void ) 
+{ 
+GLuint i,j; 
+GLuint point_cnt; 
+
+glClear( GL_COLOR_BUFFER_BIT ); 
+switch ( mode ) 
+{ 
+case DEFINE: /* 多边形定义阶段 */ 
+/* 绘制网格，单个网格大小为10像素，网格数目取决于OpenGL窗口大小 */ 
+glColor3f ( 0.6, 0.5, 0.5 ); 
+glBegin ( GL_LINES ); 
+for ( i = 0 ; i < width ; i += 10 ){ 
+for ( j = 0 ; j < height ; j += 10 ) { 
+glVertex2i ( 0, j ); 
+glVertex2i ( width, j ); 
+glVertex2i ( i, height ); 
+glVertex2i ( i, 0 ); 
+} 
+} 
+/* 绘制多边形 */ 
+glColor3f( 1.0, 1.0, 0.0 ); 
+for ( i = 0 ; i <= contour_cnt ; i++ ) { 
+point_cnt = contours[i].point_cnt; 
+glBegin( GL_LINES ); 
+switch ( point_cnt ) { 
+case 0: 
+break; 
+case 1: 
+glVertex2fv ( contours[i].p[0] ); 
+glVertex2fv ( contours[i].p[0] ); 
+break; 
+case 2: 
+glVertex2fv( contours[i].p[0] ); 
+glVertex2fv( contours[i].p[1] ); 
+break; 
+default: 
+--point_cnt; 
+for ( j = 0 ; j < point_cnt ; j++ ) { 
+glVertex2fv ( contours [ i ]. p [ j ] ); 
+glVertex2fv ( contours [ i ] .p [ j+1 ] ); 
+} 
+if ( contours [ i ].p [ j+1 ] [ 0 ] == -1 ) 
+{ 
+glVertex2fv ( contours [ i ]. p [ 0 ] ); 
+glVertex2fv ( contours [ i ] .p [ j ] ); 
+} 
+break; 
+} 
+glEnd(); 
+} 
+glFinish(); 
+break; 
+
+case TESSELATED: /* 绘制镶嵌后的多边形，显示列表由函数tesse（）给出 */ 
+glColor3f( 0.7, 0.7, 0.0 ); 
+glCallList( list_start ); 
+glLineWidth( 2.0 ); 
+glCallList( list_start + 1 ); 
+glLineWidth( 1.0 ); 
+glFlush(); 
+break; 
+} 
+glColor3f( 1.0, 1.0, 0.0 ); 
+} 
+
+/* 菜单选项clear的响应函数，将所有变量清零，绘制模式设为DEFINE */ 
+void clear( void ) 
+{ 
+contour_cnt = 0; 
+contours[0].point_cnt = 0; 
+triangle_cnt = 0; 
+mode = DEFINE; 
+glDeleteLists( list_start, 2 ); 
+list_start = 0; 
+} 
+
+/* 菜单选项quit的响应函数，退出程序 */ 
+void quit( void ) 
+{ 
+exit( 0 ); 
+} 
+
+/* 定义菜单的响应函数 */ 
+void menu_selected( int entry ) 
+{ 
+switch ( entry ) { 
+case CLEAR: 
+clear ( ); 
+break; 
+case TESSELATE: 
+tesse ( ); 
+break; 
+case QUIT: 
+quit ( ); 
+break; 
+} 
+/* 选择菜单后重绘OpenGL窗口 */ 
+glutPostRedisplay(); 
+} 
+
+/* 定义快捷键响应函数 */ 
+void key_pressed( unsigned char key, int x, int y ) 
+{ 
+/* 在此例子中，不需要用表明鼠标位置的变量x和y */ 
+( void ) x; ( void ) y; 
+/* 针对不同按键，定义动作 */ 
+switch ( key ) { 
+case 'c': 
+case 'C': 
+clear(); 
+break; 
+case 't': 
+case 'T': 
+tesse(); 
+break; 
+case 'q': 
+case 'Q': 
+quit(); 
+break; 
+} 
+/* 按键后重绘窗口 */ 
+glutPostRedisplay(); 
+} 
+
+/* 执行一些程序的初始化过程 */ 
+void myinit( void ) 
+{ 
+/* 设置窗口背景颜色*/ 
+glClearColor( 0.4, 0.4, 0.4, 0.0 ); 
+glShadeModel( GL_FLAT ); 
+glPolygonMode( GL_FRONT, GL_FILL ); 
+
+/* 创建一个菜单，并定义菜单项及该菜单对应的响应函数 */ 
+menu = glutCreateMenu( menu_selected ); 
+glutAddMenuEntry( "clear", CLEAR ); 
+glutAddMenuEntry( "tesselate", TESSELATE ); 
+glutAddMenuEntry( "quit", QUIT ); 
+/* 定义菜单动作方式：点击右键弹出 */ 
+glutAttachMenu( GLUT_RIGHT_BUTTON ); 
+
+/* 注册鼠标事件响应函数 */ 
+glutMouseFunc( mouse_clicked ); 
+/* 注册键盘事件响应函数 */ 
+glutKeyboardFunc( key_pressed ); 
+
+contour_cnt = 0; 
+mode = DEFINE; 
+} 
+
+/* 定义窗口大小改变时的响应 */ 
+static void reshape( GLsizei w, GLsizei h ) 
+{ 
+glViewport( 0, 0, w, h ); 
+
+glMatrixMode( GL_PROJECTION ); 
+glLoadIdentity(); 
+glOrtho( 0.0, (GLdouble)w, 0.0, (GLdouble)h, -1.0, 1.0 ); 
+glMatrixMode( GL_MODELVIEW ); 
+glLoadIdentity(); 
+set_screen_wh( w, h ); 
+} 
+
+int main( int argc, char **argv ) 
+{ 
+/* 创建窗口 */ 
+glutInit ( & argc, argv ); 
+glutInitDisplayMode ( GLUT_SINGLE | GLUT_RGB ); 
+glutInitWindowSize ( 400, 400 ); 
+glutCreateWindow( argv[0] ); 
+
+myinit(); 
+
+glutDisplayFunc( display ); 
+glutReshapeFunc( reshape ); 
+
+glutMainLoop(); 
+return 0; 
+} 
+
+3. 用FLTK开发OpenGL程序 
+
+　　 从上面的例子我们不难看出，虽然GLUT为实现OpenGL编程提供了可能，但是作为应用程序，它是远远不够的。它只提供了原始、简陋的控制和操作方式，没有一般应用程序所需要的按钮、菜单条、输入框等控件。事实上，GLUT并不是用来单独开发应用程序的，它是用作介于OpenGL函数接口和一般的图形界面开发接口之间的过渡层。在这一点上，它无疑是成功的。Mesa选择它作为标准套件分发，大多数图形界面开发工具也保持与它的兼容性。从而使得用GLUT开发的OpenGL程序有良好的可移植性。 
+　　 和GLUT不同，FLTK本身是一个图形界面开发工具，使用它完全可以开发实用的、商用的应用程序。FLTK用C++编写，使用面向对象的开发技术，它提供多种组件供用户选用，每个组件有自己的属性和事件。在这里，我们主要讲述它的OpenGL窗口组件：Fl_Gl_Window，并充分使用C++的特性。 
+　　 这一节里，我们绘制一个可以自由旋转、平移、放缩的小立方体。程序运行后如图五所示。整个窗口是一个由Fl_Window组件定义的一般窗口，中间是一个OpenGL窗口。我们使用了一些控制工具来调整小立方体的属性。上面的Zoom标尺调整它的大小，左边和下边各有一个平移标尺和一个旋转标尺，调整小立方体的位置和角度。这些标尺都是FLTK的标准组件，它们的作用是根据用户的动作返回特定的整数或符点数。 
+
+
+
+　　 Fl_Gl_Window最重要的是两个虚函数：draw（）、handle（）和成员函数redraw（）。函数draw（）中定义绘制内容，创建窗口和窗口大小改变是这个函数被自动调用。函数handle（）中定义对各种键盘、鼠标事件的响应。当有键盘、鼠标事件响应时，这个函数被自动调用，如何有响应事件的函数被定义，则会执行此函数。函数redraw（）重绘窗口。在这个叫做CubeView的例子中，我们派生Fl_Gl_Window，得到绘制我们这个小立方体的OpenGL窗口。 
+
+// 文件CubeView.cxx，派生Fl_Gl_Window，得到绘制小立方体的OpenGL窗口 
+#include 
+#include 
+#include 
+#include 
+#include 
+// 派生类CubeView的定义 
+class CubeView : public Fl_Gl_Window { 
+public: 
+double size; // 定义小立方体的大小，供glScalef（）函数使用 
+// 构造函数，派生自Fl_Gl_Window，定义窗口大小和标题 
+CubeView(int x,int y,int w,int h,const char *l=0); 
+// 设置和取得垂直方向的旋转角度，供组件标尺调用 
+void v_angle(float angle){vAng=angle;}; 
+float v_angle(){return vAng;}; 
+// 设置和取得水平方向的旋转角度，供组件标尺调用 
+void h_angle(float angle){hAng=angle;}; 
+float h_angle(){return hAng;}; 
+// 设置水平和垂直方向的偏移量 
+void panx(float x){xshift=x;}; 
+void pany(float y){yshift=y;}; 
+
+void draw(); 
+private: 
+void drawCube(); 
+float vAng,hAng; 
+float xshift,yshift; 
+float boxv0[3];float boxv1[3]; 
+float boxv2[3];float boxv3[3]; 
+float boxv4[3];float boxv5[3]; 
+float boxv6[3];float boxv7[3]; 
+}; 
+
+// 构造函数的定义 
+CubeView::CubeView(int x,int y,int w,int h,const char *l) 
+: Fl_Gl_Window(x,y,w,h,l) 
+{ 
+// 设置变换初值 
+vAng = 0.0; 
+hAng=0.0; 
+size=10.0; 
+// 设置小立方体顶点参数 
+boxv0[0] = -0.5; boxv0[1] = -0.5; boxv0[2] = -0.5; 
+boxv1[0] = 0.5; boxv1[1] = -0.5; boxv1[2] = -0.5; 
+boxv2[0] = 0.5; boxv2[1] = 0.5; boxv2[2] = -0.5; 
+boxv3[0] = -0.5; boxv3[1] = 0.5; boxv3[2] = -0.5; 
+boxv4[0] = -0.5; boxv4[1] = -0.5; boxv4[2] = 0.5; 
+boxv5[0] = 0.5; boxv5[1] = -0.5; boxv5[2] = 0.5; 
+boxv6[0] = 0.5; boxv6[1] = 0.5; boxv6[2] = 0.5; 
+boxv7[0] = -0.5; boxv7[1] = 0.5; boxv7[2] = 0.5; 
+}; 
+
+void CubeView::drawCube() { 
+// 绘制一个半透明的立方体 
+#define ALPHA 0.5 
+glShadeModel(GL_FLAT); 
+// 用不同的颜色绘制六个面 
+glBegin(GL_QUADS); 
+glColor4f (0.0, 0.0, 1.0, ALPHA ); 
+glVertex3fv ( boxv0 ); glVertex3fv ( boxv1 ); glVertex3fv ( boxv2 ); glVertex3fv( boxv3 ); 
+
+glColor4f(1.0, 1.0, 0.0, ALPHA); 
+glVertex3fv ( boxv0 ); glVertex3fv ( boxv4 ); glVertex3fv ( boxv5 ); glVertex3fv ( boxv1 ); 
+
+glColor4f(0.0, 1.0, 1.0, ALPHA); 
+glVertex3fv ( boxv2 ); glVertex3fv ( boxv6 ); glVertex3fv ( boxv7 ); glVertex3fv ( boxv3 ); 
+
+glColor4f(1.0, 0.0, 0.0, ALPHA); 
+glVertex3fv ( boxv4 ); glVertex3fv ( boxv5 ); glVertex3fv ( boxv6 ); glVertex3fv ( boxv7 ); 
+
+glColor4f(1.0, 0.0, 1.0, ALPHA); 
+glVertex3fv ( boxv0 ); glVertex3fv ( boxv3 ); glVertex3fv ( boxv7 ); glVertex3fv ( boxv4 ); 
+
+glColor4f(0.0, 1.0, 0.0, ALPHA); 
+glVertex3fv ( boxv1 ); glVertex3fv ( boxv5 ); glVertex3fv ( boxv6 ); glVertex3fv ( boxv2 ); 
+glEnd(); 
+
+// 绘制立方体的轮廓线，一共12条 
+glColor3f(1.0, 1.0, 1.0); 
+glBegin(GL_LINES); 
+glVertex3fv ( boxv0 ); glVertex3fv ( boxv1 ); 
+glVertex3fv ( boxv1 ); glVertex3fv ( boxv2 ); 
+glVertex3fv ( boxv2 ); glVertex3fv ( boxv3 ); 
+glVertex3fv ( boxv3 ); glVertex3fv ( boxv0 ); 
+glVertex3fv ( boxv4 ); glVertex3fv ( boxv5 ); 
+glVertex3fv ( boxv5 ); glVertex3fv ( boxv6 ); 
+glVertex3fv ( boxv6 ); glVertex3fv ( boxv7 ); 
+glVertex3fv ( boxv7 ); glVertex3fv ( boxv4 ); 
+glVertex3fv ( boxv0 ); glVertex3fv ( boxv4 ); 
+glVertex3fv ( boxv1 ); glVertex3fv ( boxv5 ); 
+glVertex3fv ( boxv2 ); glVertex3fv ( boxv6 ); 
+glVertex3fv ( boxv3 ); glVertex3fv ( boxv7 ); 
+glEnd(); 
+}; 
+
+void CubeView::draw() { 
+if (!valid ( ) ) { 
+//valid（）当窗口大小改变时改变，导致这一部分内容被执行，重新设置窗口 
+glLoadIdentity(); 
+glViewport(0,0,w(),h()); 
+glOrtho(-10,10,-10,10,-20000,10000); 
+glEnable(GL_BLEND); 
+glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA); 
+} 
+
+glClear (GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT ); 
+glPushMatrix ( ); 
+// 变换。参数绘被外部函数修改 
+glTranslatef ( xshift, yshift, 0); 
+glRotatef ( hAng, 0, 1, 0 ); glRotatef ( vAng, 1, 0, 0 ); 
+glScalef ( float ( size ), float ( size ) , float ( size ) ); 
+// 绘制立方体 
+drawCube ( ); 
+glPopMatrix ( ); 
+}; 
+上面的类CubeView定义了一个绘制立方体的OpenGL窗口，外部函数可以调用它的成员函数v_angle、h_angle、panx、pany等来修改这个小立方体的属性，修改以后，可以调用函数redraw（）来刷新窗口。在下面的CubeViewUI.cxx中，我们定义类CubeViewUI，它绘制主窗口，并在其中定义了类CubeView的一个实例：cube。它同时还定义了用来控制立方体属性的5个标尺，当用户操作标尺时，这些标尺调用v_angle等函数来设置绘制立方体的一些参数。这一部分和我们的主题关系不大，不给出具体的代码。最后，我们定义main函数，它的内容相当的简单。 
+#include "CubeViewUI.h" 
+int main(int argc, char **argv) { 
+// 定义类CubeViewUI的一个实例 
+CubeViewUI *cvui=new CubeViewUI; 
+// 设置FLTK窗口显示模式 
+Fl::visual(FL_DOUBLE|FL_INDEX); 
+cvui->show(); 
+// 进入消息循环 
+return Fl::run(); 
+} 
+我们编译、连接并执行程序，就可以得到如图五所示的结果。从上面的例子我们可以看出使用FLTK编写OpenGL程序的一些优点，和GLUT它结构清晰，使用方便，而且它和GLUT是兼容的。除了glutInit（）、glutMainLoop（）等少数函数外，大部分GLUT函数可以在FLTK中使用。FLTK本身也提供了许多OpenGL函数，如绘制字符串的gl_draw（）等。 
+
+4. 结束语 
+
+　　 熟悉掌握了Linux下OpenGL的开发环境距离开发OpenGL程序还有很大的距离，毕竟问题的难点是如何很好的使用OpenGL的API。本文为即将在Linux下开发OpenGL的读者作一些铺垫和准备工作，希望并相信对大家有所帮助。
